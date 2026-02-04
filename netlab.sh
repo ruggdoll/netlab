@@ -135,13 +135,26 @@ save_state() {
 setup_ap_interface() {
     log_info "Configuration de l'interface AP..."
 
-    # Arrêter les services qui pourraient interférer
+    # Tuer les processus qui pourraient verrouiller l'interface
+    pkill -9 -f "hostapd" 2>/dev/null || true
+    pkill -9 -f "wpa_supplicant.*$IFACE_AP" 2>/dev/null || true
+    sleep 2
+
+    # Arrêter NetworkManager d'abord pour libérer l'interface
     systemctl stop NetworkManager 2>/dev/null || true
     sleep 1
 
+    # Débloquer le WiFi si bloqué par rfkill
+    rfkill unblock wifi 2>/dev/null || true
+
+    # Réinitialiser complètement l'interface
+    ip link set "$IFACE_AP" down 2>/dev/null || true
+    sleep 1
+    iw dev "$IFACE_AP" set type managed 2>/dev/null || true
+    sleep 2
+
     # Redémarrer NetworkManager mais exclure l'interface AP
     if [[ -d /etc/NetworkManager ]]; then
-        # Créer une règle temporaire pour exclure l'interface AP
         mkdir -p /etc/NetworkManager/conf.d
         cat > /etc/NetworkManager/conf.d/netlab-exclude.conf << EOF
 [keyfile]
@@ -153,8 +166,8 @@ EOF
 
     # Configurer l'interface AP
     ip link set "$IFACE_AP" down 2>/dev/null || true
-    iw dev "$IFACE_AP" set type __ap 2>/dev/null || true
     ip addr flush dev "$IFACE_AP" 2>/dev/null || true
+    sleep 1
     ip addr add "$AP_IP/24" dev "$IFACE_AP"
     ip link set "$IFACE_AP" up
 
@@ -184,7 +197,9 @@ EOF
 create_dnsmasq_conf() {
     cat > "$DNSMASQ_CONF" << EOF
 interface=$IFACE_AP
-bind-interfaces
+listen-address=$AP_IP
+bind-dynamic
+except-interface=lo
 dhcp-range=$DHCP_RANGE_START,$DHCP_RANGE_END,$AP_NETMASK,$DHCP_LEASE
 dhcp-option=option:router,$AP_IP
 dhcp-option=option:dns-server,$AP_IP
@@ -454,42 +469,48 @@ do_clients() {
     log_info "=========================================="
     echo ""
 
-    # Récupérer les clients via ARP et les baux DHCP
+    # Récupérer les clients via les baux DHCP de dnsmasq
     printf "%-18s  %-15s  %-20s\n" "MAC" "IP" "NOM"
     printf "%-18s  %-15s  %-20s\n" "------------------" "---------------" "--------------------"
 
-    # Lire depuis la table ARP
-    while read -r line; do
-        ip=$(echo "$line" | awk '{print $1}')
-        mac=$(echo "$line" | awk '{print $3}')
+    # Fichier de baux dnsmasq (format: timestamp mac ip hostname client-id)
+    local leases_file="/var/lib/misc/dnsmasq.leases"
 
-        if [[ "$mac" != "(incomplete)" && -n "$mac" ]]; then
-            # Chercher le nom dans le mapping
-            name="${DEVICE_NAMES[$mac]:-"(non identifié)"}"
-            printf "%-18s  %-15s  %-20s\n" "$mac" "$ip" "$name"
-        fi
-    done < <(arp -i "$IFACE_AP" -n 2>/dev/null | tail -n +2)
+    if [[ -f "$leases_file" ]]; then
+        while read -r _ts mac ip hostname _cid; do
+            if [[ -n "$mac" && -n "$ip" ]]; then
+                # Chercher le nom dans le mapping, sinon utiliser le hostname DHCP
+                name="${DEVICE_NAMES[$mac]:-$hostname}"
+                [[ "$name" == "*" || -z "$name" ]] && name="(non identifié)"
+                printf "%-18s  %-15s  %-20s\n" "$mac" "$ip" "$name"
+            fi
+        done < "$leases_file"
+    else
+        log_warn "Fichier de baux DHCP non trouvé"
+    fi
 
     echo ""
     log_info "Filtres Wireshark par appareil:"
-    while read -r line; do
-        ip=$(echo "$line" | awk '{print $1}')
-        mac=$(echo "$line" | awk '{print $3}')
-        if [[ "$mac" != "(incomplete)" && -n "$mac" ]]; then
-            name="${DEVICE_NAMES[$mac]:-$mac}"
-            echo "  $name: ip.addr == $ip"
-        fi
-    done < <(arp -i "$IFACE_AP" -n 2>/dev/null | tail -n +2)
+    if [[ -f "$leases_file" ]]; then
+        while read -r _ts mac ip hostname _cid; do
+            if [[ -n "$mac" && -n "$ip" ]]; then
+                name="${DEVICE_NAMES[$mac]:-$hostname}"
+                [[ "$name" == "*" || -z "$name" ]] && name="$mac"
+                echo "  $name: ip.addr == $ip"
+            fi
+        done < "$leases_file"
+    fi
 
     echo ""
     log_warn "Pour nommer les appareils, édite DEVICE_NAMES dans le script:"
     log_info "  declare -A DEVICE_NAMES=("
-    while read -r line; do
-        mac=$(echo "$line" | awk '{print $3}')
-        if [[ "$mac" != "(incomplete)" && -n "$mac" ]]; then
-            echo "      [\"$mac\"]=\"MonAppareil\""
-        fi
-    done < <(arp -i "$IFACE_AP" -n 2>/dev/null | tail -n +2)
+    if [[ -f "$leases_file" ]]; then
+        while read -r _ts mac _ip _hostname _cid; do
+            if [[ -n "$mac" ]]; then
+                echo "      [\"$mac\"]=\"MonAppareil\""
+            fi
+        done < "$leases_file"
+    fi
     log_info "  )"
     echo ""
 }
