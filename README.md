@@ -118,6 +118,45 @@ python3 -m http.server 8888 --bind 10.66.66.1
 1. Téléchargez le certificat via le navigateur
 2. **Paramètres → Sécurité → Installer un certificat → Certificat CA**
 
+
+### Generation de mon propre cert AC
+ Tu peux générer ta propre CA avec des informations personnalisées :
+
+  # Crée un dossier pour ta CA personnalisée                                                                                                                          
+  mkdir -p ~/.mitmproxy-custom
+                                                                                                                                                                      
+  # Génère la clé privée                                    
+  openssl genrsa -out ~/.mitmproxy-custom/mitmproxy-ca.key 4096
+
+  # Génère le certificat CA avec tes infos personnalisées
+  openssl req -new -x509 -key ~/.mitmproxy-custom/mitmproxy-ca.key \
+      -out ~/.mitmproxy-custom/mitmproxy-ca.crt \
+      -days 1825 \
+      -subj "/CN=NetLab CA - Ruggdoll/O=Mon Labo Personnel/OU=Analyse Reseau/L=MaVille/C=FR"
+
+  Tu peux personnaliser :
+  - CN : Nom commun (ce qui s'affiche)
+  - O : Organisation
+  - OU : Unité organisationnelle
+  - L : Ville
+  - C : Pays
+
+  Ensuite, combine les fichiers pour mitmproxy :
+
+  cat ~/.mitmproxy-custom/mitmproxy-ca.key ~/.mitmproxy-custom/mitmproxy-ca.crt > ~/.mitmproxy-custom/mitmproxy-ca.pem
+
+  # Génère aussi le format .cer pour iOS
+  cp ~/.mitmproxy-custom/mitmproxy-ca.crt ~/.mitmproxy-custom/mitmproxy-ca-cert.cer
+
+  Lance mitmproxy avec ta CA :
+
+  mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080 \
+      --set confdir=~/.mitmproxy-custom
+
+  Pour vérifier ton certificat :
+  openssl x509 -in ~/.mitmproxy-custom/mitmproxy-ca.crt -noout -subject -issuer
+
+
 ### Vérification
 
 Ouvrez `https://example.com` dans Safari/Chrome. Si la requête apparaît dans mitmproxy, l'interception fonctionne.
