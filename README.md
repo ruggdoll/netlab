@@ -89,96 +89,111 @@ sudo ./netlab.sh clients
 sudo ./netlab.sh stop
 ```
 
-## Installation du certificat mitmproxy
+## Certificats
 
-Pour intercepter le trafic HTTPS, les appareils doivent faire confiance au CA de mitmproxy.
+Pour intercepter le trafic HTTPS, les appareils doivent faire confiance à l'autorité de certification (AC) utilisée par mitmproxy. Deux options : utiliser l'AC par défaut de mitmproxy, ou générer la vôtre.
 
-### Servir le certificat
+> **Ne jamais distribuer la clé privée.** Seul le **certificat public** (`mitmproxy-ca-cert.pem`) doit être installé sur les appareils. La clé privée (`mitmproxy-ca.pem`, `.key`) reste exclusivement sur le poste d'analyse — c'est elle qui permet à mitmproxy de signer les certificats à la volée.
+
+### Option 1 : AC par défaut de mitmproxy
+
+L'AC est générée automatiquement au premier lancement :
 
 ```bash
-# Le CA est généré au premier lancement de mitmproxy
 mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080
-
-# Servir le certificat via HTTP (dans un autre terminal)
-cd ~/.mitmproxy
-python3 -m http.server 8888 --bind 10.66.66.1
 ```
 
-### Sur iPhone
+Les fichiers sont créés dans `~/.mitmproxy/`. Le certificat à distribuer est `mitmproxy-ca-cert.pem` (certificat public uniquement).
+
+### Option 2 : générer sa propre AC
+
+Créez un dossier dédié :
+
+```bash
+mkdir -p ~/.mitmproxy-custom
+```
+
+Générez la clé privée et le certificat :
+
+```bash
+# Clé privée (reste sur le poste, ne jamais distribuer)
+openssl genrsa -out ~/.mitmproxy-custom/mitmproxy-ca.key 4096
+
+# Certificat AC avec vos informations
+openssl req -new -x509 -key ~/.mitmproxy-custom/mitmproxy-ca.key \
+      -out ~/.mitmproxy-custom/mitmproxy-ca.crt \
+      -days 1825 \
+      -subj "/CN=NetLab CA/O=Mon Labo/OU=Analyse Reseau/L=MaVille/C=FR"
+```
+
+Champs personnalisables : `CN` (nom affiché), `O` (organisation), `OU` (unité), `L` (ville), `C` (pays).
+
+Préparez les fichiers pour mitmproxy et pour la distribution :
+
+```bash
+# Fichier combiné clé + certificat pour mitmproxy (ne jamais distribuer)
+cat ~/.mitmproxy-custom/mitmproxy-ca.key ~/.mitmproxy-custom/mitmproxy-ca.crt \
+    > ~/.mitmproxy-custom/mitmproxy-ca.pem
+
+# Certificat seul pour distribution aux appareils (sans clé privée)
+cp ~/.mitmproxy-custom/mitmproxy-ca.crt ~/.mitmproxy-custom/mitmproxy-ca-cert.pem
+```
+
+Lancez mitmproxy avec votre AC :
+
+```bash
+mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080 --set confdir=~/.mitmproxy-custom
+```
+
+Pour vérifier votre certificat :
+
+```bash
+openssl x509 -in ~/.mitmproxy-custom/mitmproxy-ca.crt -noout -subject -issuer
+```
+
+### Distribuer le certificat aux appareils
+
+Servez **uniquement le certificat public** via HTTP. Ne jamais exposer le répertoire contenant la clé privée :
+
+```bash
+mkdir -p /tmp/netlab-cert
+
+# AC par défaut :
+cp ~/.mitmproxy/mitmproxy-ca-cert.pem /tmp/netlab-cert/
+
+# Ou AC personnalisée :
+# cp ~/.mitmproxy-custom/mitmproxy-ca-cert.pem /tmp/netlab-cert/
+
+# Servir uniquement ce fichier
+python3 -m http.server 8888 --bind 10.66.66.1 --directory /tmp/netlab-cert
+```
+
+### Installation sur iPhone
 
 1. Connectez-vous au WiFi **NetLab-Analysis**
 2. Ouvrez Safari : `http://10.66.66.1:8888/mitmproxy-ca-cert.pem`
 3. **Autoriser** le téléchargement du profil
 4. **Réglages → Profil téléchargé → Installer**
 5. **Réglages → Général → Informations → Réglages des certificats**
-   → Activer la confiance pour **mitmproxy**
+   → Activer la confiance totale pour le certificat
 
-### Sur Android
+### Installation sur Android
 
-1. Téléchargez le certificat via le navigateur
+1. Ouvrez le navigateur : `http://10.66.66.1:8888/mitmproxy-ca-cert.pem`
 2. **Paramètres → Sécurité → Installer un certificat → Certificat CA**
 
+### Suppression du certificat (iPhone)
 
-## Generation de mon propre cert AC
- Tu peux générer ta propre CA avec des informations personnalisées.
+1. **Réglages → Général → VPN et gestion de l'appareil**
+2. Appuyez sur le profil sous **Profil de configuration**
+3. **Supprimer le profil** (en rouge en bas)
+4. Confirmez avec votre code
 
-### Crée un dossier pour ta CA personnalisée                                                                                                                          
-```bash
-mkdir -p ~/.mitmproxy-custom
-```                                                                                                                                                                      
-
-### Génère la clé privée                                    
-```bash
-openssl genrsa -out ~/.mitmproxy-custom/mitmproxy-ca.key 4096
-```
-
-### Génère le certificat CA avec tes infos personnalisées
-```bash
-openssl req -new -x509 -key ~/.mitmproxy-custom/mitmproxy-ca.key \
-      -out ~/.mitmproxy-custom/mitmproxy-ca.crt \
-      -days 1825 \
-      -subj "/CN=NetLab CA - Ruggdoll/O=Mon Labo Personnel/OU=Analyse Reseau/L=MaVille/C=FR"
-```
-
-  Tu peux personnaliser :
-  - CN : Nom commun (ce qui s'affiche)
-  - O : Organisation
-  - OU : Unité organisationnelle
-  - L : Ville
-  - C : Pays
-
-  Ensuite, combine les fichiers pour mitmproxy :
-```bash
-cat ~/.mitmproxy-custom/mitmproxy-ca.key ~/.mitmproxy-custom/mitmproxy-ca.crt > ~/.mitmproxy-custom/mitmproxy-ca.pem
-```
-
-### Génère aussi le format .cer pour iOS
-```bash
-cp ~/.mitmproxy-custom/mitmproxy-ca.crt ~/.mitmproxy-custom/mitmproxy-ca-cert.cer
-```
-
-### Lance mitmproxy avec ta CA :
-```bash
-mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080 --set confdir=~/.mitmproxy-custom
-```
-
-### Pour vérifier ton certificat :
-```bash
-openssl x509 -in ~/.mitmproxy-custom/mitmproxy-ca.crt -noout -subject -issuer
-```
+La confiance est automatiquement révoquée à la suppression du profil.
 
 ### Vérification
 
 Ouvrez `https://example.com` dans Safari/Chrome. Si la requête apparaît dans mitmproxy, l'interception fonctionne.
-
-###  comment supprimer l'AC sur l'IPhone ?                                                                                                                             
-                                                                                                                                                                                                      
-1. Réglages → Général → VPN et gestion de l'appareil                                                                                                                
-2. Tu verras le profil mitmproxy sous "Profil de configuration" → Appuie dessus
-3. Supprimer le profil (en rouge en bas)                                                                                                                            
-4. Confirme avec ton code                                                                                                                                         
-
-Si tu avais aussi activé la confiance, elle est automatiquement révoquée à la suppression du profil.
 
 ## Proxy transparent
 
