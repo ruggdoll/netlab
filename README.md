@@ -75,17 +75,20 @@ AP_PASSWORD="VivaLaSSI"
 # 1. Démarrer le lab
 sudo ./netlab.sh start
 
-# 2. Lancer mitmproxy (dans un autre terminal)
-mitmproxy --mode transparent --listen-host 0.0.0.0 --listen-port 8080
+# 2. Lancer mitmproxy avec export des clés de session TLS (dans un autre terminal)
+SSLKEYLOGFILE=/tmp/netlab/sslkeys.log mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080
 
 # 3. Connecter les appareils au WiFi "NetLab-Analysis"
 
 # 4. Identifier les appareils
 sudo ./netlab.sh clients
 
-# 5. Analyser dans Wireshark avec filtre: ip.addr == <IP_APPAREIL>
+# 5. Lancer Wireshark sur l'interface AP (dans un autre terminal)
+sudo wireshark -i wlx00c0cab68fbb -k
 
-# 6. Terminer
+# 6. Configurer le déchiffrement TLS dans Wireshark (voir section Wireshark)
+
+# 7. Terminer
 sudo ./netlab.sh stop
 ```
 
@@ -240,6 +243,37 @@ La commande `clients` affichera alors les noms au lieu des MAC.
 
 ## Wireshark
 
+### Capture
+
+Lancez Wireshark sur l'interface AP pour capturer le trafic des appareils connectés :
+
+```bash
+sudo wireshark -i wlx00c0cab68fbb -k
+```
+
+Ou via la commande intégrée pour une capture pcap :
+
+```bash
+sudo ./netlab.sh capture
+```
+
+### Déchiffrement TLS
+
+Le TLS moderne utilise l'échange de clés ECDHE (forward secrecy). La clé privée de l'AC ne suffit pas à déchiffrer le trafic. Il faut exporter les clés de session via `SSLKEYLOGFILE`.
+
+Lancez mitmproxy avec l'export des clés :
+
+```bash
+SSLKEYLOGFILE=/tmp/netlab/sslkeys.log mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080
+```
+
+Puis dans Wireshark :
+
+1. **Edit → Preferences → Protocols → TLS**
+2. **(Pre)-Master-Secret log filename** → `/tmp/netlab/sslkeys.log`
+
+Le trafic TLS est déchiffré en temps réel dans la capture.
+
 ### Filtres utiles
 
 ```
@@ -252,20 +286,12 @@ dns
 # Trafic MQTT
 mqtt
 
-# Trafic HTTP
+# Trafic HTTP déchiffré
 http
 
 # Handshakes TLS (voir SNI)
 tls.handshake.type == 1
 ```
-
-### Déchiffrement TLS
-
-Pour déchiffrer le trafic dans Wireshark avec votre certificat :
-
-1. **Edit → Preferences → Protocols → TLS**
-2. **RSA keys list → Edit**
-3. Ajoutez votre clé privée
 
 ## Sécurité
 
