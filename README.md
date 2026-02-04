@@ -171,6 +171,15 @@ openssl x509 -in ~/.mitmproxy-custom/mitmproxy-ca.crt -noout -subject -issuer
 
 Ouvrez `https://example.com` dans Safari/Chrome. Si la requête apparaît dans mitmproxy, l'interception fonctionne.
 
+###  comment supprimer l'AC sur l'IPhone ?                                                                                                                             
+                                                                                                                                                                                                      
+1. Réglages → Général → VPN et gestion de l'appareil                                                                                                                
+2. Tu verras le profil mitmproxy sous "Profil de configuration" → Appuie dessus
+3. Supprimer le profil (en rouge en bas)                                                                                                                            
+4. Confirme avec ton code                                                                                                                                         
+
+Si tu avais aussi activé la confiance, elle est automatiquement révoquée à la suppression du profil.
+
 ## Proxy transparent
 
 Le proxy est **réellement transparent** : aucune configuration n'est nécessaire sur les appareils (pas de proxy manuel).
