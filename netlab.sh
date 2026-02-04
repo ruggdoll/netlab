@@ -20,7 +20,7 @@ IFACE_AP="wlx00c0cab68fbb"
 
 # Configuration du point d'accès
 AP_SSID="NetLab-Analysis"
-AP_PASSWORD="123VivaLaSSI"
+AP_PASSWORD="VivaLaSSI"
 AP_CHANNEL="6"
 
 # Réseau du lab

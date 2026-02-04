@@ -53,7 +53,7 @@ chmod +x netlab.sh
 IFACE_WAN="wlp2s0"           # Interface connectée à Internet
 IFACE_AP="wlx00c0cab68fbb"   # Interface pour le point d'accès
 AP_SSID="NetLab-Analysis"
-AP_PASSWORD="SecureLabPass2024"
+AP_PASSWORD="VivaLaSSI"
 ```
 
 ## Utilisation
