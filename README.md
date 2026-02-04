@@ -264,14 +264,12 @@ Le TLS moderne utilise l'échange de clés ECDHE (forward secrecy). La clé priv
 Lancez mitmproxy avec l'export des clés :
 
 ```bash
-mkdir -p /tmp/netlab-cert
-SSLKEYLOGFILE=/tmp/netlab-cert/sslkeys.log mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080
+SSLKEYLOGFILE=/tmp/sslkeys.log mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080
 ```
 Ou avec votre AC :
 
 ```bash
-mkdir -p /tmp/netlab-cert
-SSLKEYLOGFILE=/tmp/netlab-cert/sslkeys.log mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080 --set confdir=~/.mitmproxy-custom
+SSLKEYLOGFILE=/tmp/sslkeys.log mitmproxy --mode transparent --listen-host 0.0.0.0 -p 8080 --set confdir=~/.mitmproxy-custom
 ```
 
 Puis dans Wireshark :
